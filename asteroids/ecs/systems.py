@@ -25,8 +25,7 @@ from .components import (
 )
 from .entities import (
     create_bullet,
-    set_player_accelerating,
-    set_player_decelerating,
+    set_player_acceleration,
     set_player_rotating_left,
     set_player_rotating_right,
     spawn_asteroid,
@@ -52,16 +51,19 @@ def add_systems(world: esper.World):
 
 class MovementProcessor(esper.Processor):
     def process(self, *args, delta, **kwargs):
+        # update rotation
         for _, (rot, pos) in self.world.get_components(Rotation, Position):
             pos.rotation += rot.speed * delta
             pos.normalize_rotation()
 
+        # update velocity
         for ent, (vel, acc) in self.world.get_components(Velocity, Acceleration):
             vel.x += acc.x * delta
             vel.y += acc.y * delta
 
             vel.clamp()
 
+        # update position
         for ent, (vel, pos) in self.world.get_components(Velocity, Position):
             pos.x += vel.x * delta
             pos.y += vel.y * delta
@@ -216,6 +218,8 @@ class PlayerInputProcessor(esper.Processor):
 
             match input_event:
                 case {"kind": InputEventKind.KeyUp, "key": key}:
+                    player_key_input.keydowns.discard(key)
+
                     match key:
                         case pygame.constants.K_w:
                             player_actions.append(PlayerActionKind.StopAccelerating)
@@ -228,27 +232,32 @@ class PlayerInputProcessor(esper.Processor):
                         case pygame.constants.K_SPACE:
                             player_actions.append(PlayerActionKind.Fire)
                 case {"kind": InputEventKind.KeyDown, "key": key}:
-                    match key:
-                        case pygame.constants.K_w:
-                            player_actions.append(PlayerActionKind.Accelerate)
-                        case pygame.constants.K_s:
-                            player_actions.append(PlayerActionKind.Decelerate)
-                        case pygame.constants.K_a:
-                            player_actions.append(PlayerActionKind.RotateLeft)
-                        case pygame.constants.K_d:
-                            player_actions.append(PlayerActionKind.RotateRight)
+                    player_key_input.keydowns.add(key)
+
+        # keydowns are updated every frame
+        # e.g. to accelerate in rotated direction
+        for key in player_key_input.keydowns:
+            match key:
+                case pygame.constants.K_w:
+                    player_actions.append(PlayerActionKind.Accelerate)
+                case pygame.constants.K_s:
+                    player_actions.append(PlayerActionKind.Decelerate)
+                case pygame.constants.K_a:
+                    player_actions.append(PlayerActionKind.RotateLeft)
+                case pygame.constants.K_d:
+                    player_actions.append(PlayerActionKind.RotateRight)
 
         for action in player_actions:
             match action:
                 case PlayerActionKind.Accelerate:
                     # could add/remove acceleration component instead of modifying
-                    set_player_accelerating(self.world, True)
+                    set_player_acceleration(self.world, forward=True)
                 case PlayerActionKind.StopAccelerating:
-                    set_player_accelerating(self.world, False)
+                    set_player_acceleration(self.world, unset=True)
                 case PlayerActionKind.Decelerate:
-                    set_player_decelerating(self.world, True)
+                    set_player_acceleration(self.world, forward=False)
                 case PlayerActionKind.StopDecelerating:
-                    set_player_decelerating(self.world, False)
+                    set_player_acceleration(self.world, unset=True)
                 case PlayerActionKind.Fire:
                     create_bullet(self.world)
                 case PlayerActionKind.RotateLeft:

@@ -151,32 +151,20 @@ def increase_spawn_rate(world: esper.World, multiplier: float = 1.25):
         spawning.rate *= multiplier
 
 
-def set_player_accelerating(world: esper.World, val: bool):
+def set_player_acceleration(
+    world: esper.World, *, forward: bool = True, unset: bool = False
+):
     _, (_, pos, acc) = world.get_components(PlayerShip, Position, Acceleration)[0]
 
-    if val:
+    if unset:
+        acc.x = acc.y = 0.0
+    else:
         rotation = pos.rotation
 
         offset = get_offset_for_rotation(rotation, 0.5 / 1_000)
 
-        acc.x = offset.x
-        acc.y = offset.y
-    else:
-        acc.x = acc.y = 0.0
-
-
-def set_player_decelerating(world: esper.World, val: bool):
-    _, (_, pos, acc) = world.get_components(PlayerShip, Position, Acceleration)[0]
-
-    if val:
-        rotation = pos.rotation
-
-        offset = get_offset_for_rotation(rotation, 0.5 / 1_000)
-
-        acc.x = -offset.x
-        acc.y = -offset.y
-    else:
-        acc.x = acc.y = 0.0
+        acc.x = offset.x * (1 if forward else -1)
+        acc.y = offset.y * (1 if forward else -1)
 
 
 def set_player_rotating_right(world: esper.World, val: bool):
