@@ -1,6 +1,6 @@
 import math
 
-from .components import Acceleration, Collidable, Position, Velocity
+from .components import Acceleration, Collidable, Position, PositionOffset, Velocity
 from .enums import CollidableKind
 
 
@@ -45,3 +45,39 @@ def check_circle_collision(
     distance = math.sqrt(delta_x**2 + delta_y**2)
 
     return distance < (radius1 + radius2)
+
+
+def apply_rotation_to_offset(offset: PositionOffset, rotation: float) -> PositionOffset:
+    if offset.x == 0:
+        if offset.y > 0:
+            existing_angle = math.pi / 2
+        elif offset.y < 0:
+            existing_angle = math.pi * 3 / 2
+        else:
+            raise ValueError("Invalid PositionOffset x=0 y=0")
+    else:
+        existing_angle = math.atan(offset.y / offset.x)
+
+    new_angle = existing_angle + rotation
+
+    hypot = math.sqrt(offset.x**2 + offset.y**2)
+
+    y = hypot * math.sin(new_angle)
+    x = hypot * math.cos(new_angle)
+
+    # coordinate system is upside down
+    y = -y
+
+    return PositionOffset(x=x, y=y)
+
+
+def get_offset_for_rotation(rotation: float, magnitude: float = 1.0) -> PositionOffset:
+    hypot = magnitude
+
+    y = hypot * math.sin(rotation)
+    x = hypot * math.cos(rotation)
+
+    # coordinate system is upside down
+    y = -y
+
+    return PositionOffset(x=x, y=y)

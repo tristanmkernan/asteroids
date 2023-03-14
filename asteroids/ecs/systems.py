@@ -1,5 +1,4 @@
 import logging
-import random
 
 import esper
 import pygame
@@ -17,6 +16,8 @@ from .components import (
     PlayerKeyInput,
     PlayerShip,
     Position,
+    RenderableCollection,
+    Rotation,
     Velocity,
     Spawning,
     Renderable,
@@ -26,11 +27,14 @@ from .entities import (
     create_bullet,
     set_player_accelerating,
     set_player_decelerating,
+    set_player_rotating_left,
+    set_player_rotating_right,
     spawn_asteroid,
     track_score_event,
 )
-from .enums import RenderableKind, ScoreEventKind, InputEventKind, PlayerActionKind
-from .utils import calculate_distance, calculate_velocity, check_collision
+from .enums import ScoreEventKind, InputEventKind, PlayerActionKind
+from .ui import render
+from .utils import check_collision
 
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,10 @@ def add_systems(world: esper.World):
 
 class MovementProcessor(esper.Processor):
     def process(self, *args, delta, **kwargs):
+        for _, (rot, pos) in self.world.get_components(Rotation, Position):
+            pos.rotation += rot.speed * delta
+            pos.normalize_rotation()
+
         for ent, (vel, acc) in self.world.get_components(Velocity, Acceleration):
             vel.x += acc.x * delta
             vel.y += acc.y * delta
@@ -97,13 +105,16 @@ class RenderingProcessor(esper.Processor):
 
         screen.fill((255, 255, 255))
 
-        for ent, (disp, pos) in self.world.get_components(Renderable, Position):
-            match disp.kind:
-                case RenderableKind.Circle:
-                    pygame.draw.circle(screen, disp.color, pos.tuple, disp.radius)
-                case RenderableKind.Triangle:
-                    # TODO
-                    pygame.draw.polygon(screen, disp.color, [])
+        # simple renderables
+        for ent, (renderable, pos) in self.world.get_components(Renderable, Position):
+            render(screen, renderable, pos)
+
+        # grouped renderables
+        for _, (renderables, pos) in self.world.get_components(
+            RenderableCollection, Position
+        ):
+            for renderable in renderables.items:
+                render(screen, renderable, pos)
 
         _, score_tracker = self.world.get_component(ScoreTracker)[0]
         _, (_, bullet_ammo) = self.world.get_components(PlayerShip, BulletAmmo)[0]
@@ -240,6 +251,14 @@ class PlayerInputProcessor(esper.Processor):
                     set_player_decelerating(self.world, False)
                 case PlayerActionKind.Fire:
                     create_bullet(self.world)
+                case PlayerActionKind.RotateLeft:
+                    set_player_rotating_left(self.world, True)
+                case PlayerActionKind.StopRotateLeft:
+                    set_player_rotating_left(self.world, False)
+                case PlayerActionKind.RotateRight:
+                    set_player_rotating_right(self.world, True)
+                case PlayerActionKind.StopRotateRight:
+                    set_player_rotating_right(self.world, False)
 
 
 class ScoreTimeTrackerProcessor(esper.Processor):

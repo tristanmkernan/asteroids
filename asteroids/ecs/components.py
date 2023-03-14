@@ -22,23 +22,17 @@ class Asteroid:
 
 
 @dataclasses.dataclass
-class Renderable:
-    kind: RenderableKind
-
-    color: tuple = (0, 0, 255)
-
-    # for circle
-    radius: float = 0.0
-
-    # for triangle
-    height: float = 0.0
-    rotation: float = 0.0
+class PositionOffset:
+    x: float = 0.0
+    y: float = 0.0
 
 
 @dataclasses.dataclass
 class Position:
     x: float = 0.0
     y: float = 0.0
+
+    rotation: float = 0.0
 
     @property
     def tuple(self):
@@ -49,6 +43,15 @@ class Position:
         Calculate Euclidian distance
         """
         return math.sqrt((self.x - other.x) ** 2 + (self.y - other.y) ** 2)
+
+    def normalize_rotation(self):
+        """
+        keep rotation within (-pi, pi)
+        """
+        if self.rotation > math.pi:
+            self.rotation -= math.pi * 2
+        elif self.rotation < -math.pi:
+            self.rotation += math.pi * 2
 
 
 @dataclasses.dataclass
@@ -87,6 +90,12 @@ class Velocity:
 class Acceleration:
     x: float = 0.0
     y: float = 0.0
+
+
+@dataclasses.dataclass
+class Rotation:
+    # radians / ms
+    speed: float = 0.0
 
 
 @dataclasses.dataclass
@@ -147,5 +156,22 @@ class PlayerShip:
 
 
 @dataclasses.dataclass
-class Rotation:
+class Renderable:
+    kind: RenderableKind
+
+    color: tuple = (0, 0, 255)
+
+    # for circle
+    radius: float = 0.0
+
+    # for triangle
+    height: float = 0.0
     rotation: float = 0.0
+
+    # for offset
+    offset: PositionOffset | None = None
+
+
+@dataclasses.dataclass
+class RenderableCollection:
+    items: list[Renderable]

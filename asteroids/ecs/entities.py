@@ -5,6 +5,7 @@ import esper
 
 
 from asteroids.constants import SCREEN_HEIGHT, SCREEN_WIDTH
+from asteroids.ecs.utils import get_offset_for_rotation
 
 from .components import (
     Acceleration,
@@ -14,15 +15,16 @@ from .components import (
     Collidable,
     PlayerKeyInput,
     Position,
-    Rotation,
+    PositionOffset,
+    RenderableCollection,
     ScoreTracker,
     Velocity,
     Spawning,
     Renderable,
     PlayerShip,
+    Rotation,
 )
 from .enums import CollidableKind, RenderableKind, ScoreEventKind
-from .utils import calculate_velocity
 
 
 logger = logging.getLogger(__name__)
@@ -71,9 +73,7 @@ def create_player_ship(world: esper.World):
     world.add_component(player_ship, Position(x=SCREEN_WIDTH / 2, y=SCREEN_HEIGHT / 2))
     world.add_component(player_ship, Velocity(max=0.25))
     world.add_component(player_ship, Acceleration())
-    world.add_component(
-        player_ship, Renderable(RenderableKind.Circle, radius=15, color=(255, 0, 0))
-    )
+    world.add_component(player_ship, Rotation())
     world.add_component(
         player_ship,
         Collidable(
@@ -81,20 +81,31 @@ def create_player_ship(world: esper.World):
             radius=3,
         ),
     )
-    world.add_component(player_ship, Rotation())
     world.add_component(
         player_ship, BulletAmmo(recharge_rate=1.0 / 500.0, count=3, max=5)
     )
+
+    renderables = RenderableCollection(
+        items=[
+            Renderable(RenderableKind.Circle, radius=15, color=(255, 0, 0)),
+            Renderable(
+                RenderableKind.Circle,
+                radius=5,
+                color=(0, 255, 0),
+                offset=PositionOffset(x=10),
+            ),
+        ]
+    )
+    world.add_component(player_ship, renderables)
 
 
 def create_bullet(world: esper.World):
     player, (
         player_ship,
         player_position,
-        player_rotation,
         player_velocity,
         bullet_ammo,
-    ) = world.get_components(PlayerShip, Position, Rotation, Velocity, BulletAmmo)[0]
+    ) = world.get_components(PlayerShip, Position, Velocity, BulletAmmo)[0]
 
     if bullet_ammo.empty:
         return
@@ -104,12 +115,9 @@ def create_bullet(world: esper.World):
 
     bullet = world.create_entity()
 
-    # sneaky math: copy player velocity but change magnitude
-    # FIXME TODO this doesnt work if the player isnt moving!!!
-    # need to use position and rotation
-    # also shoots backwards when moving backwards even if facing forward lol
-    velocity = Velocity(x=player_velocity.x, y=player_velocity.y, max=0.75)
-    velocity.maximize()
+    offset = get_offset_for_rotation(player_position.rotation, magnitude=0.75)
+
+    velocity = Velocity(x=offset.x, y=offset.y)
 
     world.add_component(bullet, Position(x=player_position.x, y=player_position.y))
     world.add_component(bullet, velocity)
@@ -144,20 +152,46 @@ def increase_spawn_rate(world: esper.World, multiplier: float = 1.25):
 
 
 def set_player_accelerating(world: esper.World, val: bool):
-    _, (_, acc, rot) = world.get_components(PlayerShip, Acceleration, Rotation)[0]
+    _, (_, pos, acc) = world.get_components(PlayerShip, Position, Acceleration)[0]
 
     if val:
-        # TODO
-        acc.x = acc.y = 1.0 / 2_000.0
+        rotation = pos.rotation
+
+        offset = get_offset_for_rotation(rotation, 0.5 / 1_000)
+
+        acc.x = offset.x
+        acc.y = offset.y
     else:
         acc.x = acc.y = 0.0
 
 
 def set_player_decelerating(world: esper.World, val: bool):
-    _, (_, acc, rot) = world.get_components(PlayerShip, Acceleration, Rotation)[0]
+    _, (_, pos, acc) = world.get_components(PlayerShip, Position, Acceleration)[0]
 
     if val:
-        # TODO
-        acc.x = acc.y = -1.0 / 2_000.0
+        rotation = pos.rotation
+
+        offset = get_offset_for_rotation(rotation, 0.5 / 1_000)
+
+        acc.x = -offset.x
+        acc.y = -offset.y
     else:
         acc.x = acc.y = 0.0
+
+
+def set_player_rotating_right(world: esper.World, val: bool):
+    _, (_, rot) = world.get_components(PlayerShip, Rotation)[0]
+
+    if val:
+        rot.speed = -1.0 / 500.0
+    else:
+        rot.speed = 0.0
+
+
+def set_player_rotating_left(world: esper.World, val: bool):
+    _, (_, rot) = world.get_components(PlayerShip, Rotation)[0]
+
+    if val:
+        rot.speed = 1.0 / 500.0
+    else:
+        rot.speed = 0.0
