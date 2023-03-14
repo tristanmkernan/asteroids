@@ -9,9 +9,13 @@ from asteroids.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 
 
 from .components import (
+    Acceleration,
+    Asteroid,
     Bullet,
+    BulletAmmo,
     Collidable,
     PlayerKeyInput,
+    PlayerShip,
     Position,
     Velocity,
     Spawning,
@@ -22,6 +26,7 @@ from .entities import (
     create_bullet,
     set_player_accelerating,
     set_player_decelerating,
+    spawn_asteroid,
     track_score_event,
 )
 from .enums import RenderableKind, ScoreEventKind, InputEventKind, PlayerActionKind
@@ -38,29 +43,45 @@ def add_systems(world: esper.World):
     world.add_processor(BulletProcessor())
     world.add_processor(PlayerInputProcessor())
     world.add_processor(ScoreTimeTrackerProcessor())
+    world.add_processor(BulletAmmoProcessor())
 
 
 class MovementProcessor(esper.Processor):
     def process(self, *args, delta, **kwargs):
+        for ent, (vel, acc) in self.world.get_components(Velocity, Acceleration):
+            vel.x += acc.x * delta
+            vel.y += acc.y * delta
+
+            vel.clamp()
+
         for ent, (vel, pos) in self.world.get_components(Velocity, Position):
             pos.x += vel.x * delta
             pos.y += vel.y * delta
 
+            # TODO this might need to be a separate processor
+            # handle screen crossings
+            if pos.x > SCREEN_WIDTH:
+                pos.x = 0.0
+            elif pos.x < 0.0:
+                pos.x = SCREEN_WIDTH
+
+            if pos.y > SCREEN_HEIGHT:
+                pos.y = 0.0
+            elif pos.y < 0.0:
+                pos.y = SCREEN_WIDTH
+
 
 class SpawningProcessor(esper.Processor):
     def process(self, *args, delta, **kwargs):
-        for ent, (spawning, pos) in self.world.get_components(Spawning, Position):
+        for ent, spawning in self.world.get_component(Spawning):
             spawning.elapsed += delta
 
             if spawning.elapsed > spawning.every:
-                # duplicate spawn position
-                enemy = spawn_enemy(self.world, ent)
+                asteroid = spawn_asteroid(self.world)
 
-                logger.info("Spawned new entity id=%d", enemy)
+                logger.info("Spawned new asteroid id=%d", asteroid)
 
-                track_score_event(self.world, ScoreEventKind.EnemySpawn)
-
-                spawning.elapsed = 0
+                spawning.elapsed = 0.0
 
 
 class RenderingProcessor(esper.Processor):
@@ -84,7 +105,8 @@ class RenderingProcessor(esper.Processor):
                     # TODO
                     pygame.draw.polygon(screen, disp.color, [])
 
-        scoreboard, score_tracker = self.world.get_component(ScoreTracker)[0]
+        _, score_tracker = self.world.get_component(ScoreTracker)[0]
+        _, (_, bullet_ammo) = self.world.get_components(PlayerShip, BulletAmmo)[0]
 
         time_str = f"Time {score_tracker.scores[ScoreEventKind.Time]:.1f}"
         screen.blit(
@@ -98,6 +120,12 @@ class RenderingProcessor(esper.Processor):
             (SCREEN_WIDTH - 150, 24),
         )
 
+        ammo_str = f"Ammo {bullet_ammo.count}"
+        screen.blit(
+            self.font.render(ammo_str, True, pygame.Color(0, 0, 0)),
+            (SCREEN_WIDTH - 150, 48),
+        )
+
         if show_fps:
             fps_str = f"{clock.get_fps():.1f}"
 
@@ -106,6 +134,21 @@ class RenderingProcessor(esper.Processor):
             screen.blit(fps_overlay, (0, 0))
 
         pygame.display.flip()
+
+
+class BulletAmmoProcessor(esper.Processor):
+    def process(self, *args, delta, **kwargs):
+        for ent, (player_ship, bullet_ammo) in self.world.get_components(
+            PlayerShip, BulletAmmo
+        ):
+            bullet_ammo.elapsed = min(
+                bullet_ammo.elapsed + delta, bullet_ammo.every + delta
+            )
+
+            if not bullet_ammo.full and bullet_ammo.elapsed > bullet_ammo.every:
+                bullet_ammo.count = min(bullet_ammo.count + 1, bullet_ammo.max)
+
+                bullet_ammo.elapsed = 0.0
 
 
 class BulletProcessor(esper.Processor):
@@ -117,10 +160,10 @@ class BulletProcessor(esper.Processor):
             Bullet, Collidable, Position
         ):
             for other_ent, (
-                enemy,
+                asteroid,
                 other_collidable,
                 other_pos,
-            ) in self.world.get_components(Enemy, Collidable, Position):
+            ) in self.world.get_components(Asteroid, Collidable, Position):
                 if check_collision(pos, collidable, other_pos, other_collidable):
                     logger.info("Destroying entity id=%d", other_ent)
 
@@ -167,12 +210,22 @@ class PlayerInputProcessor(esper.Processor):
                             player_actions.append(PlayerActionKind.StopAccelerating)
                         case pygame.constants.K_s:
                             player_actions.append(PlayerActionKind.StopDecelerating)
+                        case pygame.constants.K_a:
+                            player_actions.append(PlayerActionKind.StopRotateLeft)
+                        case pygame.constants.K_d:
+                            player_actions.append(PlayerActionKind.StopRotateRight)
+                        case pygame.constants.K_SPACE:
+                            player_actions.append(PlayerActionKind.Fire)
                 case {"kind": InputEventKind.KeyDown, "key": key}:
                     match key:
                         case pygame.constants.K_w:
                             player_actions.append(PlayerActionKind.Accelerate)
                         case pygame.constants.K_s:
                             player_actions.append(PlayerActionKind.Decelerate)
+                        case pygame.constants.K_a:
+                            player_actions.append(PlayerActionKind.RotateLeft)
+                        case pygame.constants.K_d:
+                            player_actions.append(PlayerActionKind.RotateRight)
 
         for action in player_actions:
             match action:
@@ -185,6 +238,8 @@ class PlayerInputProcessor(esper.Processor):
                     set_player_decelerating(self.world, True)
                 case PlayerActionKind.StopDecelerating:
                     set_player_decelerating(self.world, False)
+                case PlayerActionKind.Fire:
+                    create_bullet(self.world)
 
 
 class ScoreTimeTrackerProcessor(esper.Processor):

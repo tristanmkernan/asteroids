@@ -1,4 +1,4 @@
-((python-mode . ((pyvenv-activate . "~/prog/games/asteroid/.venv")))
+((python-mode . ((pyvenv-activate . "~/prog/games/asteroids/.venv")))
  (scss-mode . ((css-indent-offset . 2)))
  (web-mode . ((web-mode-markup-indent-offset . 2)
               (web-mode-code-indent-offset . 2)

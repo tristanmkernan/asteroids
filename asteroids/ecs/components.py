@@ -58,11 +58,58 @@ class Velocity:
 
     max: float = 0.0
 
+    def clamp(self):
+        """
+        clamp to max speed
+        """
+        current_speed = math.sqrt(self.x**2 + self.y**2)
+
+        if current_speed > self.max:
+            ratio = self.max / current_speed
+
+            self.x *= ratio
+            self.y *= ratio
+
+    def maximize(self):
+        """
+        set to max speed
+        """
+        current_speed = math.sqrt(self.x**2 + self.y**2)
+
+        if current_speed < self.max:
+            ratio = self.max / current_speed
+
+            self.x *= ratio
+            self.y *= ratio
+
 
 @dataclasses.dataclass
 class Acceleration:
     x: float = 0.0
     y: float = 0.0
+
+
+@dataclasses.dataclass
+class BulletAmmo:
+    recharge_rate: float
+    count: int
+    max: int
+    elapsed: float = 0.0
+
+    @property
+    def every(self):
+        """
+        How many seconds delay between recharge
+        """
+        return 1.0 / self.recharge_rate
+
+    @property
+    def full(self):
+        return self.count == self.max
+
+    @property
+    def empty(self):
+        return self.count == 0
 
 
 @dataclasses.dataclass

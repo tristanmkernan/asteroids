@@ -1,6 +1,6 @@
 import math
 
-from .components import Collidable, Position, Velocity
+from .components import Acceleration, Collidable, Position, Velocity
 from .enums import CollidableKind
 
 
