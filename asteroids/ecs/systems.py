@@ -13,6 +13,7 @@ from .components import (
     Bullet,
     BulletAmmo,
     Collidable,
+    Lifetime,
     PlayerKeyInput,
     PlayerShip,
     Position,
@@ -31,7 +32,7 @@ from .entities import (
     spawn_asteroid,
     track_score_event,
 )
-from .enums import ScoreEventKind, InputEventKind, PlayerActionKind
+from .enums import RenderableKind, ScoreEventKind, InputEventKind, PlayerActionKind
 from .ui import render
 from .utils import check_collision
 
@@ -47,6 +48,8 @@ def add_systems(world: esper.World):
     world.add_processor(PlayerInputProcessor())
     world.add_processor(ScoreTimeTrackerProcessor())
     world.add_processor(BulletAmmoProcessor())
+    world.add_processor(PlayerMovementVisualEffectProcessor())
+    world.add_processor(LifetimeProcessor())
 
 
 class MovementProcessor(esper.Processor):
@@ -274,3 +277,33 @@ class ScoreTimeTrackerProcessor(esper.Processor):
     def process(self, *args, delta, **kwargs):
         for _, score_tracker in self.world.get_component(ScoreTracker):
             score_tracker.scores[ScoreEventKind.Time] += delta / 1_000.0
+
+
+class PlayerMovementVisualEffectProcessor(esper.Processor):
+    elapsed = 0.0
+
+    def process(self, *args, delta, **kwargs):
+        self.elapsed += delta
+
+        _, (_, pos, vel) = self.world.get_components(PlayerShip, Position, Velocity)[0]
+
+        # spawn new visual effect
+        if self.elapsed > 250.0 and vel.magnitude > 0.20:
+            logger.debug("Spawning movement visual effect")
+
+            self.world.create_entity(
+                Position(x=pos.x, y=pos.y),
+                Lifetime(remaining=2.0 * 1_000.0),
+                Renderable(kind=RenderableKind.Circle, color=(125, 125, 125), radius=3),
+            )
+
+            self.elapsed = 0.0
+
+
+class LifetimeProcessor(esper.Processor):
+    def process(self, *args, delta, **kwargs):
+        for ent, lifetime in self.world.get_component(Lifetime):
+            lifetime.remaining -= delta
+
+            if lifetime.remaining < 0.0:
+                self.world.delete_entity(ent)

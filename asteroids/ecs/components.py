@@ -61,6 +61,10 @@ class Velocity:
 
     max: float = 0.0
 
+    @property
+    def magnitude(self):
+        return math.sqrt(self.x**2 + self.y**2)
+
     def clamp(self):
         """
         clamp to max speed
@@ -175,3 +179,8 @@ class Renderable:
 @dataclasses.dataclass
 class RenderableCollection:
     items: list[Renderable]
+
+
+@dataclasses.dataclass
+class Lifetime:
+    remaining: float = 0.0
